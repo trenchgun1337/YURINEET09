@@ -1,4 +1,3 @@
-
 <div align="center">
 
 <img src="https://images.cooltext.com/5759407.gif"
@@ -8,12 +7,11 @@
 
 <br><br>
 
+<h2>
 <a href="https://yurineet09.vercel.app">
-    <img src="https://images.cooltext.com/5759409.gif"
-         width="507"
-         height="108"
-         alt="take a look">
+> take a look
 </a>
+</h2>
 
 </div>
-```
+
