@@ -1,11 +1,10 @@
+
 <div align="center">
 
-<a href="https://cooltext.com">
-    <img src="https://images.cooltext.com/5759407.gif"
-         width="1591"
-         height="349"
-         alt="HAVE YOU EVER BEEN TO HEAVEN">
-</a>
+<img src="https://images.cooltext.com/5759407.gif"
+     width="1091"
+     height="349"
+     alt="HAVE YOU EVER BEEN TO HEAVEN">
 
 <br><br>
 
@@ -17,3 +16,4 @@
 </a>
 
 </div>
+```
