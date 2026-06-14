@@ -4,48 +4,29 @@
     <meta charset="UTF-8"> 
     <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
     <title>blog</title> 
- <link
-  rel="stylesheet"
-  href="https://unpkg.com/xp.css"
->   
+    <link rel="stylesheet" href="https://unpkg.com/xp.css">   
     <style> 
-
-    
         /* ===================== BASE (original) ===================== */ 
         body { 
-    background: url(https://i.pinimg.com/736x/9c/6f/bb/9c6fbb96c9bf74609d2dc1e5aa5d09e3.jpg); 
-    background-size: contain; 
-    background-repeat: no-repeat; 
-    background-attachment: fixed; 
-    margin: 0; 
-    min-height: 100vh; 
-} 
+            background: url(https://i.pinimg.com/736x/9c/6f/bb/9c6fbb96c9bf74609d2dc1e5aa5d09e3.jpg); 
+            background-size: contain; 
+            background-repeat: no-repeat; 
+            background-attachment: fixed; 
+            margin: 0; 
+            min-height: 100vh; 
+        } 
  
-/* moldura permanente */ 
-text{
-    font-size: 12px;
+        text { font-size: 12px; }
 
-}
-body::before { 
-    content: ""; 
- 
-    position: fixed; 
- 
-    top: 0; 
-    left: 0; 
-    right: 0; 
-    bottom: 0; 
- 
-    pointer-events: none; 
-    z-index: 999999; 
- 
-    border: 32px solid transparent; 
- 
-    border-image: 
-        url("https://i.pinimg.com/originals/21/ea/03/21ea03d955f26389cbed8efcbf82d01b.gif") 
-        32 
-        round; 
-} 
+        body::before { 
+            content: ""; 
+            position: fixed; 
+            top: 0; left: 0; right: 0; bottom: 0; 
+            pointer-events: none; 
+            z-index: 999999; 
+            border: 32px solid transparent; 
+            border-image: url("https://i.pinimg.com/originals/21/ea/03/21ea03d955f26389cbed8efcbf82d01b.gif") 32 round; 
+        } 
          
         .title { 
             color: #000000; 
@@ -66,319 +47,167 @@ body::before {
             margin-bottom: 400px; 
         } 
  
-        .normaltext { 
-            font-size: 16px; 
-            line-height: 1.5; 
-        } 
+        .normaltext { font-size: 16px; line-height: 1.5; } 
  
-        a { 
-            font-size: 16px; 
-            color: #0000CC; 
-            text-decoration: none; 
-        } 
+        a { font-size: 16px; color: #0000CC; text-decoration: none; } 
+        a:hover { font-size: 16px; color: #CC0000; text-decoration: underline; } 
  
-        a:hover { 
-            font-size: 16px; 
-            color: #CC0000; 
-            text-decoration: underline; 
-        } 
+        p { font-size: 20px; color: #000000; text-align: center; } 
  
-        p { 
-            font-size: 20px; 
-            color: #000000; 
+        /* ===================== MAIN WINDOW ===================== */
+        /* O blackcontainer vira uma window XP */
+        .blackcontainer {
+            width: 38%;
+            margin: 20px 48px 30px auto;
+            box-sizing: border-box;
+            /* window XP cuida do visual, removemos o border/background manual */
+        }
+
+        /* Garante que o window-body dentro do blackcontainer fique branco */
+        .blackcontainer .window-body {
+            background: white;
+            padding: 8px;
+            color: black;
+            font-size: 18px;
+        }
+
+        /* ===================== BLOG TOOLBAR ===================== */ 
+        .blog-toolbar { 
+            position: sticky; 
+            top: 0;
+            z-index: 1000000;
+            background: #d4d0c8; /* fundo barra xp */
+            border-bottom: 1px solid #808080;
+            padding: 4px 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* sort buttons: usam estilo XP nativo de button */
+        .sort-btn {
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .sort-btn.active-sort {
+            /* XP já mostra estado pressed nativamente ao clicar,
+               mas marcamos o ativo com cor */
+            color: #0000cc;
+            font-weight: bold;
+        }
+ 
+        .no-posts { 
             text-align: center; 
+            background: white; 
+            padding: 30px; 
+            font-size: 12px; 
         } 
  
-        .blackcontainer { 
-            color: #000000; 
-            font-size: 20px; 
-            width: 35%; 
-            height: 90%; 
-            margin: -35px 48px 30px auto; 
-            padding: 10px; 
-            box-sizing: border-box; 
-            border: #000000 1px solid;
-            background-color: white;
+        /* ===================== POST ===================== */ 
+        .post { 
+            position: relative; 
+            overflow: visible; 
+            margin-bottom: 24px; 
         } 
  
-        .post-title { 
-            color: rgb(0, 0, 102); 
-            font-size: 24px; 
-            font-weight: bold; 
-            margin-bottom: 5px; 
-            text-align: left; 
+        .post::before { 
+            content: ""; 
+            position: absolute; 
+            right: -10px; bottom: -10px; 
+            width: 14px; height: 14px; 
+            background: white; 
+            border: 1px solid black; 
+            border-radius: 50%; 
         } 
  
-        .slash-item:hover { 
-            background: #000066; 
-            color: white; 
+        .thought-dot { 
+            position: absolute; 
+            left: -8px; 
+            top: calc(50% + 35px); 
+            width: 5px; height: 5px; 
+            background: white; 
+            border: 1px solid black; 
+            border-radius: 50%; 
+        } 
+ 
+        .post-head { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            color: rgb(0, 0, 0); 
+            font-size: 11px; 
+        } 
+ 
+        .post-head-left { display: flex; gap: 10px; align-items: center; } 
+        .post-author { color: #000000; font-weight: bold; font-size: 15px; } 
+        .post-mood { color: #000066; font-size: 11px; font-style: italic; } 
+        .post-date { color: #000000; } 
+        .post-no { color: #000000; text-transform: uppercase; } 
+ 
+        /* botão delete: agora usa xp.css nativo */
+        .post-del-btn { 
+            font-size: 10px; 
+            color: #990000; 
             cursor: pointer; 
         } 
  
-        /* ===================== BLOG ===================== */ 
-        /* ===================== BLOG ===================== */ 
+        .post-body-inner { 
+            border: #000000 1px solid; 
+            background-color: white; 
+            padding: 4px; 
+            color: black; 
+            font-size: 18px; 
+            text-align: left; 
+            border-radius: 2%; 
+        } 
  
-.blog-toolbar { 
-    position: sticky; 
-    top: 20px; 
-    right: 20px; 
-    z-index: 1000000; 
-} 
+        .post-content { white-space: normal; } 
+        .post-content a { color: #0000ff; text-decoration: underline; } 
+        .post-content a:hover { color: #ff0000; } 
  
-.sort-btn { 
-    font-size: 11px; 
-    color: black; 
-    cursor: pointer; 
-    padding: 2px 8px; 
-} 
+        .post-img-wrap { margin-top: 10px; margin-bottom: 10px; display: inline-block; } 
+        .post-img-wrap img { width: 100%; height: 100%; } 
  
+        .post-img-info {
+            display: inline-flex;
+            color: #000066;
+            font-size: 12px;
+            margin: auto 2%;
+            text-decoration: underline;
+        }
  
-.sort-btn.active-sort { 
-    color: #0000cc; 
-} 
- 
-.no-posts { 
-    text-align: center; 
- 
-    background: white; 
- 
- 
-    padding: 30px; 
- 
-    font-size: 12px; 
-} 
- 
-/* ===================== POST ===================== */ 
- 
-.post { 
-    position: relative; 
-    overflow: visible; 
-    margin-bottom: 24px; 
-} 
- 
-/* dot maior — mais próximo do balão */ 
-.post::before { 
-    content: ""; 
-    position: absolute; 
-    right: -10px; 
-    bottom: -10px; 
-    width: 14px; 
-    height: 14px; 
-    background: white; 
-    border: 1px solid black; 
-    border-radius: 50%; 
-    transform: none; /* remove o translateY antigo */ 
-} 
- 
-/* dot médio */ 
-.post::after { 
-    content: ""; 
-    position: absolute; 
-    right: -22px; 
-    bottom: -20px; 
-    width: 9px; 
-    height: 9px; 
-    background: white; 
-    border: 1px solid black; 
-    border-radius: 50%; 
-    display: block; /* sobrescreve o border-top que estava aqui */ 
-    border-top: none; 
-} 
- 
-/* dot pequeno — mais longe */ 
-.thought-dot { 
-    position: absolute; 
-    right: -31px; 
-    bottom: -28px; 
-    left: auto; /* remove o `left: -8px` antigo */ 
-    top: auto;  /* remove o `top: calc(50% + 35px)` antigo */ 
-    width: 5px; 
-    height: 5px; 
-    background: white; 
-    border: 1px solid black; 
-    border-radius: 50%; 
-} 
- 
-.thought-dot { 
-    position: absolute; 
- 
-    left: -8px; 
-    top: calc(50% + 35px); 
- 
-    width: 5px; 
-    height: 5px; 
- 
-    background: white; 
-    border: 1px solid black; 
- 
-    border-radius: 50%; 
-} 
- 
- 
-.post-head { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    color: rgb(0, 0, 0); 
-    font-size: 11px; 
-} 
- 
-.post-head-left { 
-    display: flex; 
-    gap: 10px; 
-    align-items: center; 
-} 
- 
-.post-author { 
-    color: #000000; 
-    font-weight: bold; 
-    font-size: 15px; 
-     
-} 
- 
-.post-mood { 
-    color: #000066; 
-    font-size: 11px; 
-    font-style: italic; 
-} 
- 
-.post-date { 
-    color: #000000; 
-} 
- 
-.post-no { 
-    color: #000000; 
-    text-transform: uppercase;
-} 
- 
-.post-del-btn { 
-    background: #c0c0c0; 
- 
-    color: #990000; 
- 
-    font-size: 10px; 
- 
-    border-top: 2px solid #ffffff; 
-    border-left: 2px solid #ffffff; 
-    border-right: 2px solid #555555; 
-    border-bottom: 2px solid #555555; 
- 
-    cursor: pointer; 
-} 
- 
-.post-del-btn:hover { 
-    background: #ffdddd; 
-} 
- 
-.post-body-inner { 
-    border: #000000 1px solid; 
-    background-color: white; 
-    padding: 4px; 
-    color: black; 
-    font-size: 18px; 
-    text-align: left; 
-    border-radius: 2%; 
-} 
- 
-.post-content { 
-    white-space: normal; 
-} 
- 
-/* links inside posts */ 
- 
-.post-content a { 
-    color: #0000ff; 
-    text-decoration: underline; 
-} 
- 
-.post-content a:hover { 
-    color: #ff0000; 
-} 
- 
-/* image posts */ 
- 
-.post-img-wrap { 
-    margin-top: 10px; 
-    margin-bottom: 10px; 
- 
-    display: inline-block; 
-} 
- 
-.post-img-wrap img { 
-   
-    width: 100%; 
-        height: 100%; 
+        .spoiler { background: black; color: black; cursor: pointer; padding: 2px; } 
+        .spoiler.revealed { background: transparent; color: inherit; } 
+        .spoiler-cover {
+            display: inline-block;
+            background: repeating-linear-gradient(45deg, #000000, #000000 8px, #222222 8px, #222222 16px);
+            color: #ffffff;
+            font-size: 100%;
+            padding: 20px;
+            cursor: pointer;
+            text-align: center;
+        }
 
-} 
- 
-.post-img-info {
-    display: inline-flex;
-    color: #000066;
-    font-size: 12px;
-    /* text-align: center; */
-    margin: auto 2%;
-    text-decoration: underline;
-}
- 
-/* spoiler */ 
- 
-.spoiler { 
-    background: black; 
-    color: black; 
- 
-    cursor: pointer; 
- 
-    padding: 2px; 
-} 
- 
-.spoiler.revealed { 
-    background: transparent; 
-    color: inherit; 
-} 
- 
-.spoiler-cover {
-    display: inline-block;
-    background: repeating-linear-gradient(45deg, #000000, #000000 8px, #222222 8px, #222222 16px);
-    color: #ffffff;
-    font-size: 100%;
-    padding:  20;
-    /* border: 3px ridge #999999; */
-    cursor: pointer;
-    text-align: center;
-}
+        /* divisor geocities */ 
+        .post::after { 
+            content: ""; 
+            display: block; 
+            border-top: 2px groove #999999; 
+        } 
 
-/* geocities divider */ 
- 
-.post::after { 
-    content: ""; 
- 
-    display: block; 
- 
- 
-    
- 
-    border-top: 2px groove #999999; 
-} 
         /* ===================== ADMIN / FORMS ===================== */ 
+        /* content-box vira window XP menor */
         .content-box { 
-            border: 1px solid #000000; 
             margin-bottom: 12px; 
             font-size: 12px; 
             text-align: left; 
-            background: #ffffff; 
         } 
- 
-        .content-box-head { 
-            background: #000066; 
-            color: #ffffff; 
-            padding: 4px 8px; 
-            font-weight: bold; 
-        } 
- 
-        .content-box-body { 
-            padding: 8px; 
-        } 
- 
+
+        .content-box .window-body {
+            padding: 8px;
+        }
+
         .admin-section { 
             font-weight: bold; 
             color: #000066; 
@@ -386,41 +215,19 @@ body::before {
             border-bottom: 1px solid #cccccc; 
         } 
  
-        .form-table { 
-            width: 100%; 
-            font-size: 11px; 
-        } 
+        .form-table { width: 100%; font-size: 11px; } 
+        .form-table td { padding: 3px 4px; vertical-align: top; } 
+        .form-label { width: 70px; color: #666666; } 
+
+        /* form-btn: usa button xp nativo, só ajustamos o cursor */
+        .form-btn { cursor: pointer; }
  
-        .form-table td { 
-            padding: 3px 4px; 
-            vertical-align: top; 
-        } 
- 
-        .form-label { 
-            width: 70px; 
-            color: #666666; 
-        } 
- 
-        .form-btn { 
-            font-size: 11px; 
-            color: #000066; 
-            padding: 2px 8px; 
-            cursor: pointer; 
-        } 
- 
-        .form-btn:hover { 
-            background: #000066; 
-            color: #ffffff; 
-        } 
- 
-        input[type="text"], input[type="password"], textarea, select { 
-            font-family: 'Courier New', monospace; 
-            font-size: 11px; 
-            border: 1px solid #aaaaaa; 
-            padding: 2px 4px; 
-            background: #ffffff; 
-            color: #000000; 
-        } 
+        /* inputs: xp.css já estiliza input[type=text], textarea, select */
+        /* mantemos só o que o xp.css não cobre */
+        input[type="password"] {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+        }
  
         /* ===================== LIGHTBOX ===================== */ 
         #lb { 
@@ -433,67 +240,89 @@ body::before {
             justify-content: center; 
             cursor: zoom-out; 
         } 
- 
-        #lb.on { 
-            display: flex; 
-        } 
- 
-        #lb-img { 
-            max-width: 90%; 
-            max-height: 90%; 
-            border: 2px solid #ffffff; 
-        } 
- 
-        button{ 
+        #lb.on { display: flex; } 
+        #lb-img { max-width: 90%; max-height: 90%; border: 2px solid #ffffff; } 
+
+        /* botões simples fora do xp: reset apenas visual de nav */
+        button.nav-plain { 
             font-size: 12px; 
             background: none; 
             border: none; 
             color: #000066; 
+            cursor: pointer;
         } 
-
-        button:hover{ 
-            text-decoration: underline; 
-        }
-
-
+        button.nav-plain:hover { text-decoration: underline; }
     </style> 
 </head> 
 <body> 
- 
     
-    <div class="blackcontainer"> 
-        <div class="blog-toolbar"> <text>sort:</text>
-            <button id="sortBtnNewest" class="sort-btn active-sort" onclick="setSortBlog('newest')">[newest]</button> 
-            <button id="sortBtnOldest" class="sort-btn" onclick="setSortBlog('oldest')">[oldest]</button>  |  
-            <text>quick:</text>
-            <button style="color: #222222;" onclick="gettotheend()">[charon]</button>        </div> 
-        <br><br> 
-        <div id="adminContainer"></div> 
+    <!-- MAIN WINDOW XP -->
+    <div class="blackcontainer window"> 
+        <div class="title-bar">
+            <div class="title-bar-text">blog — archive shinigami</div>
+            <div class="title-bar-controls">
+                <button aria-label="Minimize"></button>
+                <button aria-label="Maximize"></button>
+                <button aria-label="Close"></button>
+            </div>
+        </div>
+
+        <div class="window-body">
+            <!-- TOOLBAR com botões XP -->
+            <div class="blog-toolbar">
+                <text>sort:</text>
+                <button id="sortBtnNewest" class="sort-btn active-sort" onclick="setSortBlog('newest')">[newest]</button> 
+                <button id="sortBtnOldest" class="sort-btn" onclick="setSortBlog('oldest')">[oldest]</button>
+                &nbsp;|&nbsp;
+                <text>quick:</text>
+                <button class="sort-btn" onclick="gettotheend()">[charon]</button>
+            </div>
+
+            <br> 
+            <div id="adminContainer"></div> 
  
-        <div id="postsContainer"> 
-            <div class="no-posts"><img style="width: 50px;" src="https://img1.picmix.com/output/stamp/thumb/6/2/2/3/2603226_cb7c0.gif" alt=""></div> 
-        </div> 
+            <div id="postsContainer"> 
+                <div class="no-posts">
+                    <img style="width: 50px;" src="https://img1.picmix.com/output/stamp/thumb/6/2/2/3/2603226_cb7c0.gif" alt="">
+                </div> 
+            </div>
+        </div>
+
+        <!-- STATUS BAR XP -->
+        <div class="status-bar">
+            <p class="status-bar-field" id="postCountStatus">loading posts...</p>
+            <p class="status-bar-field">archive shinigami</p>
+        </div>
     </div> 
  
-    <!-- lightbox for images inside posts --> 
+    <!-- lightbox --> 
     <div id="lb" onclick="lbClose()"> 
         <img id="lb-img" alt=""> 
-    </div> 
-<div class="post"> 
-    <span class="thought-dot"></span> 
-    ... 
-</div> 
-    <!-- page logic (defines filterPosts, renderGalleryTab, setSortBlog, lbOpen, etc.) --> 
-<script src="../scripts/js/script.js"></script> 
- 
-    <!-- firebase integration (feeds window._allPosts / triggers filterPosts) --> 
-<script type="module" src="../scripts/js/firebase.js"></script> 
- 
-<div class="blackcontainer">
+    </div>
 
-        <div class="link" style="text-align: center;">
-    <img style="filter:contrast(100);" src="https://img1.picmix.com/output/stamp/thumb/5/5/8/6/1726855_c666e.gif" alt="">
-    <p>where shall i take you?</p>
-<a href="./notfound.html">to home</a> |
-<a href="../../index.html">back</a></body> 
+    <div class="post"> 
+        <span class="thought-dot"></span> 
+        ... 
+    </div>
+
+    <script src="../scripts/js/script.js"></script> 
+    <script type="module" src="../scripts/js/firebase.js"></script> 
+
+    <!-- NAV WINDOW XP -->
+    <div class="blackcontainer window" style="margin-top: 12px;">
+        <div class="title-bar">
+            <div class="title-bar-text">navigation</div>
+            <div class="title-bar-controls">
+                <button aria-label="Close"></button>
+            </div>
+        </div>
+        <div class="window-body" style="text-align: center; padding: 12px;">
+            <img style="filter:contrast(100);" src="https://img1.picmix.com/output/stamp/thumb/5/5/8/6/1726855_c666e.gif" alt="">
+            <p>where shall i take you?</p>
+            <a href="./notfound.html">to home</a> |
+            <a href="../../index.html">back</a>
+        </div>
+    </div>
+
+</body> 
 </html>
