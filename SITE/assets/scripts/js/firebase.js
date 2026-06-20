@@ -1,6 +1,20 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"; 
-import { getDatabase, ref, push, remove, onValue, get, set, serverTimestamp } 
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"; 
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+  getDatabase,
+  ref,
+  push,
+  remove,
+  onValue,
+  get,
+  set,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+import {
+  getMessaging,
+  getToken
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js"; 
  
 const FB = { 
   apiKey: "AIzaSyBBr6zPaWgGNcGHz9iiNTO8O4EgAzsUMOk", 
@@ -14,7 +28,16 @@ const FB = {
  
 const app = initializeApp(FB); 
 const db = getDatabase(app); 
- 
+const messaging = getMessaging(app);
+
+if ("serviceWorker" in navigator) {
+
+  navigator.serviceWorker.register("/firebase-messaging-sw.js")
+    .then(() => console.log("SW registrado"))
+    .catch(console.error);
+
+}
+
 async function sha256(str) { 
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)); 
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join(''); 
@@ -58,3 +81,25 @@ onValue(ref(db, 'gallery/pictures'), snap => {
   renderGalleryTab('pictures'); 
   if (window._isAdmin && window.renderAdminImageList) window.renderAdminImageList(); 
 }); 
+
+async function enablePushNotifications() {
+
+  const permission = await Notification.requestPermission();
+
+  if (permission !== "granted") {
+    console.log("Permissão negada");
+    return;
+  }
+
+  const token = await getToken(
+    messaging,
+    {
+      vapidKey: "BN80N8qaIWm6NNqJks5P0v1empd94LvsmDtAXmu8HLJhq2V3eoxGKTXxhCa6DeVaM5GXqwCGvUMUJ8z6AFeUzbM"
+    }
+  );
+
+  console.log("TOKEN:", token);
+
+}
+
+window.enablePushNotifications = enablePushNotifications;
