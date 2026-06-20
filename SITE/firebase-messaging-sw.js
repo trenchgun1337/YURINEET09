@@ -6,7 +6,7 @@ firebase.initializeApp({
   authDomain: "scrapfielddatabase.firebaseapp.com",
   databaseURL: "https://scrapfielddatabase-default-rtdb.firebaseio.com",
   projectId: "scrapfielddatabase",
-  storageBucket: "scrapfielddatabase.firebasestorage.app",
+storageBucket: "scrapfielddatabase.appspot.com",
   messagingSenderId: "489751764776",
   appId: "1:489751764776:web:22255a1e9bf05a538bfa1d"
 });
