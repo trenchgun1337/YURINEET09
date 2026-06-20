@@ -93,14 +93,7 @@ async function enablePushNotifications() {
       return;
     }
 
-const registration =
-    await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-
-const token = await getToken(messaging,{
-    vapidKey:"BN80N8qaIWm6NNqJks5P0v1empd94LvsmDtAXmu8HLJhq2V3eoxGKTXxhCa6DeVaM5GXqwCGvUMUJ8z6AFeUzbM",
-    serviceWorkerRegistration: registration
-});
-
+    const registration = await navigator.serviceWorker.ready;
 
     const token = await getToken(
       messaging,
