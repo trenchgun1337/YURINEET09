@@ -84,22 +84,33 @@ onValue(ref(db, 'gallery/pictures'), snap => {
 
 async function enablePushNotifications() {
 
-  const permission = await Notification.requestPermission();
+  try {
 
-  if (permission !== "granted") {
-    console.log("Permissão negada");
-    return;
+    const permission = await Notification.requestPermission();
+
+    if (permission !== "granted") {
+      alert("Permissão negada");
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+
+    const token = await getToken(
+      messaging,
+      {
+        vapidKey: "BN80N8qaIWm6NNqJks5P0v1empd94LvsmDtAXmu8HLJhq2V3eoxGKTXxhCa6DeVaM5GXqwCGvUMUJ8z6AFeUzbM",
+        serviceWorkerRegistration: registration
+      }
+    );
+
+    alert("TOKEN:\n" + token);
+
+  } catch (err) {
+
+    console.error(err);
+    alert(err.message);
+
   }
 
-  const token = await getToken(
-    messaging,
-    {
-      vapidKey: "BN80N8qaIWm6NNqJks5P0v1empd94LvsmDtAXmu8HLJhq2V3eoxGKTXxhCa6DeVaM5GXqwCGvUMUJ8z6AFeUzbM"
-    }
-  );
-
-  console.log("TOKEN:", token);
-
 }
-
 window.enablePushNotifications = enablePushNotifications;
