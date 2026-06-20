@@ -17,3 +17,6 @@
 
 
 <img src="https://pixelsafari.neocities.org/buttons/1html.png">
+<img src="https://pixelsafari.neocities.org/buttons/1sucks.gif">
+<img src="https://pixelsafari.neocities.org/buttons/1geo.gif">
+<img src="https://pixelsafari.neocities.org/buttons/1bw20.gif">
