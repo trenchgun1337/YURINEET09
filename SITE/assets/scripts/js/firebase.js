@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"; 
-import { getDatabase, ref, push, remove, onValue, get, serverTimestamp } 
+import { getDatabase, ref, push, remove, onValue, get, set, serverTimestamp } 
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"; 
  
 const FB = { 
@@ -25,6 +25,7 @@ window._ref = ref;
 window._push = push; 
 window._remove = remove; 
 window._get = get; 
+window._set = set; 
 window._sha256 = sha256; 
 window._serverTimestamp = serverTimestamp; 
  
@@ -36,6 +37,12 @@ onValue(ref(db, 'blog/posts'), snap => {
   const val = snap.val() || {}; 
   window._allPosts = sortNewest(Object.entries(val).map(([id, d]) => ({ ...d, id }))); 
   filterPosts(); 
+  if (window.handleBlogPostNotifications) window.handleBlogPostNotifications(window._allPosts); 
+}); 
+
+onValue(ref(db, 'blog/adminLastOnline'), snap => { 
+  const val = snap.val(); 
+  if (window.setAdminLastOnline) window.setAdminLastOnline(val); 
 }); 
  
 onValue(ref(db, 'gallery/sketches'), snap => { 

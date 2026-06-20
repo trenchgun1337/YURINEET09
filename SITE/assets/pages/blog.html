@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
     <link  rel="stylesheet"  href="https://unpkg.com/xp.css">
 
-
-
     <title>blog</title> 
  
     <style> 
@@ -122,12 +120,27 @@ body::before {
     position: sticky; 
     top: 20px; 
     right: 20px; 
-    z-index: 1000000; 
+    z-index: 1000; 
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
 } 
+
+.blog-toolbar-spacer {
+    flex: 1 1 auto;
+}
+
+.last-online {
+    margin-left: auto;
+    color: #666666;
+    font-size: 10px;
+    white-space: nowrap;
+}
  
 .sort-btn { 
     font-size: 11px; 
-    color: black; 
+    color: #8b8b8b; 
     cursor: pointer; 
     padding: 2px 8px; 
 } 
@@ -250,6 +263,13 @@ body::before {
     color: #000000; 
     text-transform: uppercase;
 } 
+
+.post-new {
+    color: #cc0000;
+    background: transparent;
+    font-size: 11px;
+    font-weight: bold;
+}
  
 .post-del-btn { 
     background: #c0c0c0; 
@@ -421,6 +441,112 @@ body::before {
             background: #ffffff; 
             color: #000000; 
         } 
+
+        .editor-tools {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 3px;
+        }
+
+        .emoji-picker-btn {
+            width: 24px;
+            height: 22px;
+            padding: 1px;
+            border-top: 2px solid #ffffff;
+            border-left: 2px solid #ffffff;
+            border-right: 2px solid #555555;
+            border-bottom: 2px solid #555555;
+            background: #c0c0c0;
+            cursor: pointer;
+        }
+
+        .emoji-picker-btn img {
+            width: 16px;
+            height: 16px;
+            vertical-align: middle;
+        }
+
+        .emoji-picker-panel,
+        .slash-suggest {
+            display: none;
+            position: absolute;
+            left: 4px;
+            top: 26px;
+            width: 230px;
+            max-height: 180px;
+            overflow: auto;
+            background: #ffffff;
+            border: 1px solid #000000;
+            z-index: 10000;
+            text-align: left;
+            font-size: 10px;
+            padding: 4px;
+            box-sizing: border-box;
+        }
+
+        .slash-suggest {
+            top: 100%;
+            margin-top: 2px;
+        }
+
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+            gap: 4px;
+        }
+
+        .emoji-item,
+        .slash-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 4px;
+            color: #000000;
+            cursor: pointer;
+        }
+
+        .emoji-item:hover,
+        .slash-item:hover,
+        .slash-item.active {
+            background: #000066;
+            color: #ffffff;
+        }
+
+        .emoji-item img,
+        .slash-item img {
+            width: 18px;
+            height: 18px;
+            object-fit: contain;
+            flex: 0 0 auto;
+        }
+
+        .emoji-insert {
+            margin-left: auto;
+            font-size: 9px;
+            color: #000066;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        .emoji-item:hover .emoji-insert {
+            color: #ffffff;
+        }
+
+        .blog-notifier {
+            display: none;
+            border: 1px solid #000000;
+            background: #ffffff;
+            padding: 6px;
+            margin-bottom: 10px;
+            font-size: 11px;
+            text-align: left;
+        }
+
+        .blog-notifier button {
+            font-size: 11px;
+            margin-left: 4px;
+        }
  
         /* ===================== LIGHTBOX ===================== */ 
         #lb { 
@@ -428,7 +554,7 @@ body::before {
             position: fixed; 
             top: 0; left: 0; right: 0; bottom: 0; 
             background: rgba(0,0,0,0.85); 
-            z-index: 999; 
+            z-index: 1000002; 
             align-items: center; 
             justify-content: center; 
             cursor: zoom-out; 
@@ -466,8 +592,12 @@ body::before {
             <button id="sortBtnNewest" class="sort-btn active-sort" onclick="setSortBlog('newest')">[newest]</button> 
             <button id="sortBtnOldest" class="sort-btn" onclick="setSortBlog('oldest')">[oldest]</button>  |  
             <text>quick:</text>
-            <button style="color: #222222;" onclick="gettotheend()">[charon]</button>        </div> 
+            <button style="color: #222222;" onclick="gettotheend()">[charon]</button>
+            <span class="blog-toolbar-spacer"></span>
+            <span id="adminLastOnline" class="last-online">last online: unknown</span>
+        </div> 
         <br><br> 
+        <div id="blogNotifier" class="blog-notifier"></div>
         <div id="adminContainer"></div> 
  
         <div id="postsContainer"> 
@@ -494,6 +624,6 @@ body::before {
         <div class="link" style="text-align: center;">
     <img style="filter:contrast(100);" src="https://img1.picmix.com/output/stamp/thumb/5/5/8/6/1726855_c666e.gif" alt="">
     <p>where shall i take you?</p>
-<a href="./notfound.html">to home</a> |
+<a href="./home.html">to home</a> |
 <a href="../../index.html">back</a></body> 
 </html>
