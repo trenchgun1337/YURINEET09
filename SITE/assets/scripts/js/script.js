@@ -38,11 +38,27 @@ const EMOTE_CATEGORIES = {
   martini: 'emoji', 
   star: 'emoji' 
 }; 
+const BUNNY_EMOTE_FILES = [
+  'bunny.gif',
+  ...Array.from({ length: 72 }, (_, i) => `bunny${i + 2}.gif`),
+  'bunny75.gif',
+  'bunny76.png',
+  'bunny77.gif',
+  'bunny78.gif',
+  'bunny79.gif',
+  'bunny80.gif'
+];
+BUNNY_EMOTE_FILES.forEach(file => {
+  const name = file.replace(/\.(gif|png)$/i, '');
+  EMOTES[name] = `https://pixelsafari.neocities.org/favicon/animals/bunny/${file}`;
+});
 const EMOTE_FALLBACK = 'https://img1.picmix.com/output/stamp/normal/3/0/1/6/286103_31d67.gif'; 
 const EMOTE_FALLBACK_TITLE = "this post is older than the emotes upgrade...OR...no such emojis were choose"; 
 const BLOG_LAST_SEEN_POST_KEY = 'yurineetBlogLastSeenPostTs'; 
 const BLOG_NOTIFY_CHOICE_KEY = 'yurineetBlogNotifyChoice'; 
 const BLOG_LAST_ONLINE_KEY = 'yurineetAdminLastOnline'; 
+const BLOG_POSTS_PER_PAGE = 9;
+const BLOG_PUSH_READY_TIMEOUT = 8000;
  
 window.YURINEET_GALLERY = window.YURINEET_GALLERY || { sketches: [], pictures: [] }; 
 window._allPosts = []; 
@@ -50,6 +66,7 @@ window._fbSketches = null;
 window._fbPictures = null; 
 window._isAdmin = false; 
 window._blogSort = 'newest'; 
+window._blogVisiblePosts = BLOG_POSTS_PER_PAGE;
  
 /* ── PAGE TITLE ── */ 
 function setPageTitle(section) { document.title = 'DEATH ARCHIVE | ' + section; } 
@@ -242,6 +259,7 @@ const moodHTML = `<span style="margin-left:5px;">mood: <img src="${moodIcon}" ti
 
 function setSortBlog(order) { 
   window._blogSort = order; 
+  window._blogVisiblePosts = BLOG_POSTS_PER_PAGE;
   document.getElementById('sortBtnNewest').className = order === 'newest' ? 'sort-btn active-sort' : 'sort-btn'; 
   document.getElementById('sortBtnOldest').className = order === 'oldest' ? 'sort-btn active-sort' : 'sort-btn'; 
   filterPosts(); 
@@ -257,11 +275,62 @@ function gettotheend() {
 
 window.gettotheend = gettotheend;
 
+function canUseBrowserNotifications() {
+  return 'Notification' in window && (window.isSecureContext || ['localhost', '127.0.0.1'].includes(location.hostname));
+}
+
+async function waitForBlogPushRegistration(timeout = BLOG_PUSH_READY_TIMEOUT) {
+  let waited = 0;
+  while (!window.registerBlogPushToken && !window.enablePushNotifications && waited < timeout) {
+    await new Promise(r => setTimeout(r, 120));
+    waited += 120;
+  }
+  return window.registerBlogPushToken || window.enablePushNotifications || null;
+}
+
+async function saveBlogPushToken(box, quiet = false) {
+  const registerPush = await waitForBlogPushRegistration();
+  if (!registerPush) {
+    if (box && !quiet) {
+      box.innerHTML = 'notifications are enabled in this tab. reload if push token saving does not appear.';
+      box.style.display = 'block';
+    }
+    return null;
+  }
+  try {
+    const token = await registerPush({ silent: true });
+    if (box && !quiet) {
+      box.innerHTML = token ? 'notifications enabled.' : 'notifications enabled in this tab.';
+      box.style.display = 'block';
+      setTimeout(() => { box.style.display = 'none'; }, 1600);
+    }
+    return token;
+  } catch (e) {
+    console.warn('push token registration failed', e);
+    if (box && !quiet) {
+      box.innerHTML = 'notifications are allowed, but push token saving failed: ' + esc(e.message || e);
+      box.style.display = 'block';
+    }
+    return null;
+  }
+}
+
 function initBlogNotifications() { 
   const box = document.getElementById('blogNotifier'); 
-  if (!box || !('Notification' in window)) return; 
+  if (!box) return;
+  if (!('Notification' in window)) {
+    box.innerHTML = 'notifications are not supported in this browser.';
+    box.style.display = 'block';
+    return;
+  }
+  if (!canUseBrowserNotifications()) {
+    box.innerHTML = 'notifications need https or localhost.';
+    box.style.display = 'block';
+    return;
+  }
   if (Notification.permission === 'granted') { 
     localStorage.setItem(BLOG_NOTIFY_CHOICE_KEY, 'yes'); 
+    saveBlogPushToken(box, true);
     return; 
   } 
   if (Notification.permission === 'denied' || localStorage.getItem(BLOG_NOTIFY_CHOICE_KEY) === 'no') return; 
@@ -272,11 +341,22 @@ window.initBlogNotifications = initBlogNotifications;
 
 async function enableBlogNotifications() { 
   const box = document.getElementById('blogNotifier'); 
-  if (!('Notification' in window)) return; 
+  if (!('Notification' in window)) return;
+  if (!canUseBrowserNotifications()) {
+    if (box) {
+      box.innerHTML = 'notifications need https or localhost.';
+      box.style.display = 'block';
+    }
+    return;
+  }
   const permission = await Notification.requestPermission(); 
   if (permission === 'granted') { 
     localStorage.setItem(BLOG_NOTIFY_CHOICE_KEY, 'yes'); 
-    if (box) { box.innerHTML = 'notifications enabled.'; setTimeout(() => { box.style.display = 'none'; }, 1200); } 
+    if (box) {
+      box.innerHTML = 'saving notification token...';
+      box.style.display = 'block';
+    }
+    await saveBlogPushToken(box);
   } else { 
     localStorage.setItem(BLOG_NOTIFY_CHOICE_KEY, 'no'); 
     if (box) box.style.display = 'none'; 
@@ -339,12 +419,24 @@ function filterPosts() {
   if (!posts.length) { container.innerHTML = '<div class="no-posts">no posts yet.</div>'; return; } 
   const total = window._allPosts.length; 
   const newest = [...window._allPosts].sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0)); 
-  container.innerHTML = posts.map(p => { 
+  const visible = Math.max(BLOG_POSTS_PER_PAGE, Number(window._blogVisiblePosts) || BLOG_POSTS_PER_PAGE);
+  const visiblePosts = posts.slice(0, visible);
+  let html = visiblePosts.map(p => { 
     const idx = newest.findIndex(x => x.id === p.id); 
     return buildPostCard(p, idx >= 0 ? total - idx : total, idx >= 0 && idx < 3); 
-  }).join(''); 
+  }).join('');
+  if (visible < posts.length) {
+    html += `<div class="show-more-wrap"><button class="form-btn show-more-btn" onclick="showMorePosts()">show more</button></div>`;
+  }
+  container.innerHTML = html; 
 } 
 window.filterPosts = filterPosts; 
+
+function showMorePosts() {
+  window._blogVisiblePosts = (Number(window._blogVisiblePosts) || BLOG_POSTS_PER_PAGE) + BLOG_POSTS_PER_PAGE;
+  filterPosts();
+}
+window.showMorePosts = showMorePosts;
  
 async function deletePost(id) { 
   if (!window._isAdmin || !id) return; 
@@ -516,6 +608,20 @@ function getActiveSlash(ta = getPostTextarea()) {
   }; 
 } 
 
+function getActiveEmojiName(ta = getPostTextarea()) {
+  if (!ta) return null;
+  const caret = ta.selectionStart;
+  const before = ta.value.slice(0, caret);
+  const match = before.match(/(^|[\s([{])(:[a-zA-Z0-9_-]*)$/);
+  if (!match) return null;
+  const token = match[2];
+  return {
+    absStart: before.length - token.length,
+    query: token.slice(1).toLowerCase(),
+    caret
+  };
+}
+
 function renderSlashItem(item, i) { 
   const active = i === _slashSelectedIdx ? ' active' : ''; 
   if (item.type === 'command') { 
@@ -531,9 +637,15 @@ function updateSlashHelp() {
   const ta = getPostTextarea(); 
   if (!help) return; 
   const active = getActiveSlash(ta); 
-  if (!active) { help.style.display = 'none'; return; } 
+  const activeEmoji = active ? null : getActiveEmojiName(ta);
+  if (!active && !activeEmoji) { help.style.display = 'none'; return; } 
  
-  if (active.command === '/emoji') { 
+  if (activeEmoji) {
+    _slashMode = 'emoji-name';
+    _slashItems = Object.keys(EMOTES)
+      .filter(name => !activeEmoji.query || name.includes(activeEmoji.query) || emoteCategory(name).includes(activeEmoji.query))
+      .map(name => ({ type: 'emoji', name }));
+  } else if (active.command === '/emoji') { 
     _slashMode = 'emoji'; 
     _slashItems = Object.keys(EMOTES) 
       .filter(name => !active.query || name.includes(active.query) || emoteCategory(name).includes(active.query)) 
@@ -585,6 +697,19 @@ function replaceActiveSlash(text) {
   return true; 
 } 
 
+function replaceActiveEmojiName(text) {
+  const ta = getPostTextarea();
+  if (!ta) return false;
+  const active = getActiveEmojiName(ta);
+  if (!active) return false;
+  const end = ta.selectionStart;
+  ta.value = ta.value.slice(0, active.absStart) + text + ta.value.slice(end);
+  const pos = active.absStart + text.length;
+  ta.focus();
+  ta.setSelectionRange(pos, pos);
+  return true;
+}
+
 function insertSlashCommand(cmd) { 
   if (!replaceActiveSlash(cmd + ' ')) insertTextAtCaret(cmd + ' '); 
   _slashSelectedIdx = 0; 
@@ -595,7 +720,7 @@ window.insertSlashCommand = insertSlashCommand;
 
 function insertEmoteToken(name) { 
   const token = ':' + name + ': '; 
-  if (!replaceActiveSlash(token)) insertTextAtCaret(token); 
+  if (!replaceActiveSlash(token) && !replaceActiveEmojiName(token)) insertTextAtCaret(token); 
   closeEmojiPicker(); 
   const help = document.getElementById('slashHelp'); 
   if (help) help.style.display = 'none'; 

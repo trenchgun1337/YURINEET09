@@ -12,6 +12,7 @@ storageBucket: "scrapfielddatabase.appspot.com",
 });
 
 const messaging = firebase.messaging();
+const BLOG_URL = "/assets/pages/blog.html";
 
 messaging.onBackgroundMessage((payload) => {
 
@@ -21,8 +22,15 @@ messaging.onBackgroundMessage((payload) => {
     payload.notification?.title || "New post!",
     {
       body: payload.notification?.body || "",
-      icon: payload.notification?.icon || "/FAVICON.jpg"
+      icon: payload.notification?.icon || "/FAVICON.jpg",
+      data: payload.data || { url: BLOG_URL }
     }
   );
 
+});
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const url = event.notification.data?.url || BLOG_URL;
+  event.waitUntil(clients.openWindow(url));
 });

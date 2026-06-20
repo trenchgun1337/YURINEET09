@@ -3,6 +3,7 @@
 <head> 
     <meta charset="UTF-8"> 
     <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+    <link rel="icon" type="image/jpeg" href="../../FAVICON.jpg">
     <link  rel="stylesheet"  href="https://unpkg.com/xp.css">
 
     <title>blog</title> 
@@ -11,6 +12,10 @@
 
     
         /* ===================== BASE (original) ===================== */ 
+        html, body, body *, button, input, textarea, select {
+            font-family: "Times New Roman", Times, serif !important;
+        }
+
         body { 
     background: url(https://i.pinimg.com/736x/9c/6f/bb/9c6fbb96c9bf74609d2dc1e5aa5d09e3.jpg); 
     background-size: contain; 
@@ -434,7 +439,7 @@ body::before {
         } 
  
         input[type="text"], input[type="password"], textarea, select { 
-            font-family: 'Courier New', monospace; 
+            font-family: "Times New Roman", Times, serif; 
             font-size: 11px; 
             border: 1px solid #aaaaaa; 
             padding: 2px 4px; 
@@ -473,7 +478,7 @@ body::before {
             position: absolute;
             left: 4px;
             top: 26px;
-            width: 230px;
+            width: min(360px, calc(100% - 8px));
             max-height: 180px;
             overflow: auto;
             background: #ffffff;
@@ -546,6 +551,15 @@ body::before {
         .blog-notifier button {
             font-size: 11px;
             margin-left: 4px;
+        }
+
+        .show-more-wrap {
+            margin: 10px 0 2px;
+            text-align: center;
+        }
+
+        .show-more-btn {
+            font-size: 12px;
         }
  
         /* ===================== LIGHTBOX ===================== */ 

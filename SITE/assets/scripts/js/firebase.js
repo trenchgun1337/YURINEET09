@@ -13,7 +13,8 @@ import {
 
 import {
   getMessaging,
-  getToken
+  getToken,
+  isSupported
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js"; 
  
 const FB = { 
@@ -28,15 +29,29 @@ const FB = {
  
 const app = initializeApp(FB); 
 const db = getDatabase(app); 
-const messaging = getMessaging(app);
+let messaging = null;
+const messagingSupportedPromise = isSupported()
+  .then(supported => {
+    if (supported) messaging = getMessaging(app);
+    return supported;
+  })
+  .catch(err => {
+    console.warn("Firebase Messaging indisponivel", err);
+    return false;
+  });
 
-if ("serviceWorker" in navigator) {
-
-  navigator.serviceWorker.register("/firebase-messaging-sw.js")
-    .then(() => console.log("SW registrado"))
-    .catch(console.error);
-
-}
+const canRegisterServiceWorker = "serviceWorker" in navigator && (window.isSecureContext || ["localhost", "127.0.0.1"].includes(location.hostname));
+const serviceWorkerRegistrationPromise = canRegisterServiceWorker
+  ? navigator.serviceWorker.register(new URL("../../../firebase-messaging-sw.js", import.meta.url).href)
+    .then(registration => {
+      console.log("SW registrado");
+      return registration;
+    })
+    .catch(err => {
+      console.error("SW falhou", err);
+      return null;
+    })
+  : Promise.resolve(null);
 
 async function sha256(str) { 
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)); 
@@ -82,18 +97,26 @@ onValue(ref(db, 'gallery/pictures'), snap => {
   if (window._isAdmin && window.renderAdminImageList) window.renderAdminImageList(); 
 }); 
 
-async function enablePushNotifications() {
-
+async function enablePushNotifications(options = {}) {
+  const silent = !!options.silent;
   try {
+    if (!("Notification" in window)) throw new Error("Notifications are not supported in this browser.");
+    if (!canRegisterServiceWorker) throw new Error("Notifications need https or localhost.");
 
-    const permission = await Notification.requestPermission();
+    const supported = await messagingSupportedPromise;
+    if (!supported || !messaging) throw new Error("Firebase Messaging is not supported in this browser.");
+
+    const permission = Notification.permission === "granted"
+      ? "granted"
+      : await Notification.requestPermission();
 
     if (permission !== "granted") {
-      alert("Permissão negada");
-      return;
+      if (!silent) alert("Permissao negada");
+      return null;
     }
 
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await serviceWorkerRegistrationPromise;
+    if (!registration) throw new Error("Service worker registration failed.");
 
     const token = await getToken(
       messaging,
@@ -103,14 +126,18 @@ async function enablePushNotifications() {
       }
     );
 
-    alert("TOKEN:\n" + token);
+    if (!token) throw new Error("Firebase did not return a notification token.");
 
+    const tokenKey = await sha256(token);
+    await set(ref(db, "tokens/" + tokenKey), token);
+
+    if (!silent) alert("notifications enabled.");
+    return token;
   } catch (err) {
-
     console.error(err);
-    alert(err.message);
-
+    if (!silent) alert(err.message);
+    throw err;
   }
-
 }
 window.enablePushNotifications = enablePushNotifications;
+window.registerBlogPushToken = enablePushNotifications;
