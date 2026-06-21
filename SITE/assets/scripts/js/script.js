@@ -54,11 +54,16 @@ BUNNY_EMOTE_FILES.forEach(file => {
 });
 const EMOTE_FALLBACK = 'https://img1.picmix.com/output/stamp/normal/3/0/1/6/286103_31d67.gif'; 
 const EMOTE_FALLBACK_TITLE = "this post is older than the emotes upgrade...OR...no such emojis were choose"; 
-const BLOG_LAST_SEEN_POST_KEY = 'yurineetBlogLastSeenPostTs'; 
-const BLOG_NOTIFY_CHOICE_KEY = 'yurineetBlogNotifyChoice'; 
 const BLOG_LAST_ONLINE_KEY = 'yurineetAdminLastOnline'; 
 const BLOG_POSTS_PER_PAGE = 9;
-const BLOG_PUSH_READY_TIMEOUT = 8000;
+const POST_SECRET = 'cdaeb22a5cd77d36df622f09873fc4ff5cf81b44ff3b90595df12b7de767059a';
+const POST_LOCK_ITERATIONS = 160000;
+const POST_ICONS = {
+  edit: 'https://greenbox.network/icons/stationary/Pencil-icon.png',
+  pin: 'https://greenbox.network/icons/stationary/Pin-red-icon.png',
+  key: 'https://greenbox.network/icons/woc2/key.png',
+  lock: 'https://greenbox.network/icons/woc1/padlock.png'
+};
  
 window.YURINEET_GALLERY = window.YURINEET_GALLERY || { sketches: [], pictures: [] }; 
 window._allPosts = []; 
@@ -67,6 +72,9 @@ window._fbPictures = null;
 window._isAdmin = false; 
 window._blogSort = 'newest'; 
 window._blogVisiblePosts = BLOG_POSTS_PER_PAGE;
+window._postViewMode = window._postViewMode || {};
+window._unlockedPosts = window._unlockedPosts || {};
+window._editingPostId = null;
  
 /* ── PAGE TITLE ── */ 
 function setPageTitle(section) { document.title = 'DEATH ARCHIVE | ' + section; } 
@@ -74,6 +82,74 @@ function setPageTitle(section) { document.title = 'DEATH ARCHIVE | ' + section; 
 function esc(v) { 
   return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); 
 } 
+
+function bytesToBase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+}
+
+function base64ToBytes(str) {
+  const bin = atob(str);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function requireLockCrypto() {
+  if (!window.crypto || !window.crypto.subtle) {
+    throw new Error('locked posts need a secure browser context.');
+  }
+}
+
+async function derivePostLockKey(password, saltBytes, iterations) {
+  requireLockCrypto();
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: saltBytes, iterations, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function encryptPostPayload(payload, password) {
+  if (!password) throw new Error('enter a post password.');
+  requireLockCrypto();
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const key = await derivePostLockKey(password, salt, POST_LOCK_ITERATIONS);
+  const encoded = new TextEncoder().encode(JSON.stringify(payload));
+  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+  return {
+    v: 1,
+    alg: 'AES-GCM',
+    kdf: 'PBKDF2-SHA256',
+    iter: POST_LOCK_ITERATIONS,
+    salt: bytesToBase64(salt),
+    iv: bytesToBase64(iv),
+    data: bytesToBase64(new Uint8Array(cipher))
+  };
+}
+
+async function decryptPostPayload(pack, password) {
+  if (!pack || !pack.salt || !pack.iv || !pack.data) throw new Error('missing locked post data.');
+  if (!password) throw new Error('enter password.');
+  const salt = base64ToBytes(pack.salt);
+  const iv = base64ToBytes(pack.iv);
+  const key = await derivePostLockKey(password, salt, Number(pack.iter) || POST_LOCK_ITERATIONS);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, base64ToBytes(pack.data));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
 
 function emoteCategory(name) { 
   return EMOTE_CATEGORIES[name] || 'emoji'; 
@@ -187,8 +263,65 @@ function detectEmbeds(text) {
   return found; 
 } 
  
-function buildPostCard(p, num, isNew = false) { 
-  const raw = p.contentRaw || ''; 
+function normalizePostMedia(media) {
+  return Array.isArray(media) && media.length ? media : null;
+}
+
+function postPayloadFrom(data = {}) {
+  const media = normalizePostMedia(data.media || (data.imageSrc ? [{ url: data.imageSrc, info: data.imageInfo || null, type: 'image' }] : null));
+  return {
+    title: data.title || null,
+    moodText: data.moodText || null,
+    moodEmote: data.moodEmote || null,
+    media,
+    spoilerImg: !!data.spoilerImg,
+    contentRaw: data.contentRaw ?? ' ',
+    ts: data.ts || null
+  };
+}
+
+function payloadFieldsForSave(payload) {
+  return {
+    title: payload.title || null,
+    moodText: payload.moodText || null,
+    moodEmote: payload.moodEmote || null,
+    media: normalizePostMedia(payload.media),
+    spoilerImg: !!payload.spoilerImg,
+    contentRaw: payload.contentRaw ?? ' '
+  };
+}
+
+function hasPostPayloadContent(payload) {
+  const fields = payloadFieldsForSave(payload || {});
+  return !!((fields.title && fields.title.trim()) || (fields.contentRaw && fields.contentRaw.trim()) || (fields.media && fields.media.length));
+}
+
+function isCurrentLocked(p) {
+  return !!(p && p.lockedData);
+}
+
+function isOriginalLocked(p) {
+  return !!(p && p.originalLockedData);
+}
+
+function hasPostOriginal(p) {
+  return !!(p && p.updatedAt && (p.original || p.originalLockedData));
+}
+
+function getCurrentPayload(p) {
+  if (!p) return null;
+  if (isCurrentLocked(p)) return window._unlockedPosts[p.id]?.current || null;
+  return postPayloadFrom(p);
+}
+
+function getOriginalPayload(p) {
+  if (!p || !hasPostOriginal(p)) return null;
+  if (isOriginalLocked(p)) return window._unlockedPosts[p.id]?.original || null;
+  return postPayloadFrom(p.original);
+}
+
+function buildPostPayloadHTML(payload) {
+  const raw = payload.contentRaw || ''; 
   let htmlContent = ''; 
   if (raw) { 
     const { html } = parse4chan(raw); 
@@ -200,14 +333,13 @@ embedsHTML += `<iframe src="${esc(e.src)}" width="100%" height="220" style="bord
   } 
    
   let mediaHTML = ''; 
-  // Backward compatibility with single imageSrc 
-  const mediaItems = p.media || (p.imageSrc ? [{ url: p.imageSrc, info: p.imageInfo, type: 'image' }] : []); 
+  const mediaItems = payload.media || []; 
    
   for (const item of mediaItems) { 
     const info = item.info; 
 const fi = info ? `<a href="${esc(item.url)}" target="_blank" rel="noopener">${esc(info.name || '')} (${esc(String(info.sizeKB || ''))} KB${info.w ? `, ${info.w}x${info.h}` : ''})</a>` : `<a href="${esc(item.url)}" target="_blank" rel="noopener">${esc(item.url)}</a>`;     
 
-if (p.spoilerImg) { 
+if (payload.spoilerImg) { 
   mediaHTML += `<div class="post-img-wrap"><span class="post-img-info" style="display:none;">${fi}</span><img src="${esc(item.url)}" alt="" loading="lazy" style="display:none;"><div class="spoiler-cover" onclick="this.previousElementSibling.style.display='block';this.previousElementSibling.previousElementSibling.style.display='';this.style.display='none';"> IM A SPOILER!!! CLICK HERE TO REVEAL THE FULL POST</div></div>`;
     } else { 
       if (item.type?.startsWith('video')) { 
@@ -220,21 +352,60 @@ if (p.spoilerImg) {
     } 
   } 
  
-  const titleHTML = p.title ? `<div class="post-title" style="color:rgb(0, 0, 102); font-size: 24px; font-weight: bold; margin-bottom: 5px;">${esc(p.title)}</div>` : ''; 
-   
+  const titleHTML = payload.title ? `<div class="post-title" style="color:rgb(0, 0, 102); font-size: 24px; font-weight: bold; margin-bottom: 5px;">${esc(payload.title)}</div>` : ''; 
+  return `${titleHTML}${mediaHTML}${htmlContent}`;
+}
+
+function buildMoodHTML(payload) {
   let moodIcon = EMOTE_FALLBACK; 
   let moodTitle = EMOTE_FALLBACK_TITLE; 
-  if (p.moodEmote && EMOTES[p.moodEmote]) { 
-    moodIcon = EMOTES[p.moodEmote]; 
-    moodTitle = p.moodText || p.moodEmote; 
-  } else if (p.moodText) { 
-    moodTitle = p.moodText; 
+  if (payload && payload.moodEmote && EMOTES[payload.moodEmote]) { 
+    moodIcon = EMOTES[payload.moodEmote]; 
+    moodTitle = payload.moodText || payload.moodEmote; 
+  } else if (payload && payload.moodText) { 
+    moodTitle = payload.moodText; 
   } 
    
-const moodLabel = (p.moodEmote && EMOTES[p.moodEmote]) || p.moodText ? ` ${esc(moodTitle)}` : '';
-const moodHTML = `<span style="margin-left:5px;">mood: <img src="${moodIcon}" title="${esc(moodTitle)}" alt="mood" style="height:14px; vertical-align:middle;">${moodLabel}</span>`; 
+const moodLabel = (payload && payload.moodEmote && EMOTES[payload.moodEmote]) || (payload && payload.moodText) ? ` ${esc(moodTitle)}` : '';
+return `<span style="margin-left:5px;">mood: <img src="${moodIcon}" title="${esc(moodTitle)}" alt="mood" style="height:14px; vertical-align:middle;">${moodLabel}</span>`; 
+}
+
+function buildLockedPostHTML(p) {
+  const id = esc(p.id || '');
+  return `
+    <div class="post-locked">
+      <img src="${esc(POST_ICONS.lock)}" alt="Locked post" title="Locked post">
+      <div>locked post</div>
+      <div class="post-unlock-row">
+        <input type="password" id="unlockPw-${id}" autocomplete="current-password" onkeydown="if(event.key==='Enter') unlockPost('${id}')">
+        <button class="form-btn" onclick="unlockPost('${id}')">unlock</button>
+      </div>
+      <div id="unlockStatus-${id}" style="color:#cc0000;font-size:10px;margin-top:4px;"></div>
+    </div>`;
+}
+
+function buildAdminPostButtons(p) {
+  if (!window._isAdmin || !p.id) return '';
+  const id = esc(p.id);
+  const pinClass = p.pinned ? 'post-icon-btn is-active' : 'post-icon-btn';
+  return `
+    <button class="post-icon-btn" title="Edit post" onclick="beginEditPost('${id}')"><img class="post-admin-icon" src="${esc(POST_ICONS.edit)}" alt="Edit post" title="Edit post"></button>
+    <button class="${pinClass}" title="Pin post" onclick="togglePinPost('${id}')"><img class="post-admin-icon" src="${esc(POST_ICONS.pin)}" alt="Pin post" title="Pin post"></button>
+    <button class="post-del-btn" onclick="deletePost('${id}')">delete</button>`;
+}
+
+function buildPostCard(p, num, isNew = false) { 
+  const showOriginal = window._postViewMode[p.id] === 'original' && hasPostOriginal(p);
+  const payload = showOriginal ? getOriginalPayload(p) : getCurrentPayload(p);
+  const moodHTML = payload ? buildMoodHTML(payload) : buildMoodHTML(null);
   const newHTML = isNew ? '<span class="post-new">new!*</span>' : ''; 
-  const delBtn = window._isAdmin ? `<button class="post-del-btn" onclick="deletePost('${esc(p.id || '')}')">delete</button>` : ''; 
+  const adminBtns = buildAdminPostButtons(p);
+  const pinnedHTML = p.pinned ? `<img class="post-status-icon" src="${esc(POST_ICONS.pin)}" alt="Pinned post" title="Pinned post">` : '';
+  const lockHTML = (isCurrentLocked(p) || isOriginalLocked(p)) ? `<img class="post-status-icon" src="${esc(POST_ICONS.lock)}" alt="Locked post" title="Locked post">` : '';
+  const updatedHTML = hasPostOriginal(p)
+    ? `<div class="post-update-line">post updated ${fmtDate(p.updatedAt)} <button onclick="togglePostOriginal('${esc(p.id || '')}')">${showOriginal ? 'show updated' : 'show original'}</button></div>`
+    : '';
+  const bodyHTML = payload ? buildPostPayloadHTML(payload) : buildLockedPostHTML(p);
   return ` 
     <div class="post" id="post-${esc(p.id || '')}"> 
       <div class="post-head"> 
@@ -244,14 +415,15 @@ const moodHTML = `<span style="margin-left:5px;">mood: <img src="${moodIcon}" ti
 <span class="post-date">date: ${fmtDate(p.ts)}</span>       </div> 
         <div style="display:flex;align-items:baseline;gap:6px;"> 
           ${newHTML} 
+          ${pinnedHTML}
+          ${lockHTML}
           <span class="post-no">No.${num}</span> 
-          ${delBtn} 
+          ${adminBtns} 
         </div> 
       </div> 
+      ${updatedHTML}
       <div class="post-body-inner"> 
-        ${titleHTML} 
-        ${mediaHTML} 
-        ${htmlContent} 
+        ${bodyHTML} 
       </div> 
     </div>`; 
 } 
@@ -275,132 +447,67 @@ function gettotheend() {
 
 window.gettotheend = gettotheend;
 
-function canUseBrowserNotifications() {
-  return 'Notification' in window && (window.isSecureContext || ['localhost', '127.0.0.1'].includes(location.hostname));
+function toggleLanguageMenu() {
+  const menu = document.getElementById('languageMenu');
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+}
+window.toggleLanguageMenu = toggleLanguageMenu;
+
+function closeLanguageMenu() {
+  const menu = document.getElementById('languageMenu');
+  if (menu) menu.style.display = 'none';
 }
 
-async function waitForBlogPushRegistration(timeout = BLOG_PUSH_READY_TIMEOUT) {
-  let waited = 0;
-  while (!window.registerBlogPushToken && !window.enablePushNotifications && waited < timeout) {
-    await new Promise(r => setTimeout(r, 120));
-    waited += 120;
-  }
-  return window.registerBlogPushToken || window.enablePushNotifications || null;
-}
-
-async function saveBlogPushToken(box, quiet = false) {
-  const registerPush = await waitForBlogPushRegistration();
-  if (!registerPush) {
-    if (box && !quiet) {
-      box.innerHTML = 'notifications are enabled in this tab. reload if push token saving does not appear.';
-      box.style.display = 'block';
+async function translateVisibleText(targetLang) {
+  const TranslatorApi = window.Translator || window.ai?.translator;
+  if (!TranslatorApi || typeof TranslatorApi.create !== 'function') return false;
+  const sourceLanguage = targetLang === 'pt-BR' ? 'en' : 'pt';
+  const translator = await TranslatorApi.create({ sourceLanguage, targetLanguage: targetLang });
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      const tag = node.parentElement?.tagName;
+      if (['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION'].includes(tag)) return NodeFilter.FILTER_REJECT;
+      if (node.parentElement?.closest('#adminContainer')) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
     }
-    return null;
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const before = node.nodeValue;
+    node.nodeValue = await translator.translate(before);
   }
+  return true;
+}
+
+async function setPageLanguage(targetLang) {
+  closeLanguageMenu();
+  document.documentElement.lang = targetLang;
+  document.documentElement.setAttribute('translate', 'yes');
+  localStorage.setItem('yurineetBlogLanguage', targetLang);
   try {
-    const token = await registerPush({ silent: true });
-    if (box && !quiet) {
-      box.innerHTML = token ? 'notifications enabled.' : 'notifications enabled in this tab.';
-      box.style.display = 'block';
-      setTimeout(() => { box.style.display = 'none'; }, 1600);
+    const translated = await translateVisibleText(targetLang);
+    if (!translated) {
+      const googleTarget = targetLang === 'pt-BR' ? 'pt' : targetLang;
+      window.open(`https://translate.google.com/translate?sl=auto&tl=${encodeURIComponent(googleTarget)}&u=${encodeURIComponent(location.href)}`, '_blank', 'noopener');
     }
-    return token;
   } catch (e) {
-    console.warn('push token registration failed', e);
-    if (box && !quiet) {
-      box.innerHTML = 'notifications are allowed, but push token saving failed: ' + esc(e.message || e);
-      box.style.display = 'block';
-    }
-    return null;
+    console.warn('native translation failed', e);
   }
 }
+window.setPageLanguage = setPageLanguage;
 
-function initBlogNotifications() { 
-  const box = document.getElementById('blogNotifier'); 
-  if (!box) return;
-  if (!('Notification' in window)) {
-    box.innerHTML = 'notifications are not supported in this browser.';
-    box.style.display = 'block';
-    return;
-  }
-  if (!canUseBrowserNotifications()) {
-    box.innerHTML = 'notifications need https or localhost.';
-    box.style.display = 'block';
-    return;
-  }
-  if (Notification.permission === 'granted') { 
-    localStorage.setItem(BLOG_NOTIFY_CHOICE_KEY, 'yes'); 
-    saveBlogPushToken(box, true);
-    return; 
-  } 
-  if (Notification.permission === 'denied' || localStorage.getItem(BLOG_NOTIFY_CHOICE_KEY) === 'no') return; 
-  box.innerHTML = 'notify me when a new post appears? <button class="form-btn" onclick="enableBlogNotifications()">yes</button><button class="form-btn" onclick="declineBlogNotifications()">no</button>'; 
-  box.style.display = 'block'; 
-} 
-window.initBlogNotifications = initBlogNotifications; 
-
-async function enableBlogNotifications() { 
-  const box = document.getElementById('blogNotifier'); 
-  if (!('Notification' in window)) return;
-  if (!canUseBrowserNotifications()) {
-    if (box) {
-      box.innerHTML = 'notifications need https or localhost.';
-      box.style.display = 'block';
-    }
-    return;
-  }
-  const permission = await Notification.requestPermission(); 
-  if (permission === 'granted') { 
-    localStorage.setItem(BLOG_NOTIFY_CHOICE_KEY, 'yes'); 
-    if (box) {
-      box.innerHTML = 'saving notification token...';
-      box.style.display = 'block';
-    }
-    await saveBlogPushToken(box);
-  } else { 
-    localStorage.setItem(BLOG_NOTIFY_CHOICE_KEY, 'no'); 
-    if (box) box.style.display = 'none'; 
-  } 
-} 
-window.enableBlogNotifications = enableBlogNotifications; 
-
-function declineBlogNotifications() { 
-  localStorage.setItem(BLOG_NOTIFY_CHOICE_KEY, 'no'); 
-  const box = document.getElementById('blogNotifier'); 
-  if (box) box.style.display = 'none'; 
-} 
-window.declineBlogNotifications = declineBlogNotifications; 
-
-function handleBlogPostNotifications(posts) { 
-  if (!Array.isArray(posts) || !posts.length) return; 
-  const newestTs = Math.max(...posts.map(p => Number(p.ts) || 0)); 
-  if (!Number.isFinite(newestTs) || newestTs <= 0) return; 
-  const seenTs = Number(localStorage.getItem(BLOG_LAST_SEEN_POST_KEY)) || 0; 
-  localStorage.setItem(BLOG_LAST_SEEN_POST_KEY, String(newestTs)); 
-  if (!seenTs) return; 
- 
-  const newPosts = posts 
-    .filter(p => (Number(p.ts) || 0) > seenTs) 
-    .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0)); 
-  if (!newPosts.length || !('Notification' in window) || Notification.permission !== 'granted') return; 
- 
-  const latest = newPosts[0]; 
-  const text = (latest.title || latest.contentRaw || 'new blog post').replace(/\s+/g, ' ').trim().slice(0, 90); 
-  const icon = latest.moodEmote && EMOTES[latest.moodEmote] ? EMOTES[latest.moodEmote] : EMOTE_FALLBACK; 
-  try { 
-    new Notification(newPosts.length > 1 ? `${newPosts.length} new blog posts` : 'new blog post', { 
-      body: text, 
-      icon 
-    }); 
-  } catch (e) { 
-    console.warn('notification failed', e); 
-  } 
-} 
-window.handleBlogPostNotifications = handleBlogPostNotifications; 
+document.addEventListener('click', e => {
+  const wrap = document.querySelector('.language-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) closeLanguageMenu();
+});
 
 function initBlogChrome() { 
   setAdminLastOnline(Number(localStorage.getItem(BLOG_LAST_ONLINE_KEY)) || null); 
-  initBlogNotifications(); 
+  const lang = localStorage.getItem('yurineetBlogLanguage');
+  if (lang) document.documentElement.lang = lang;
 } 
 
 if (document.readyState === 'loading') { 
@@ -414,8 +521,12 @@ function filterPosts() {
   const container = document.getElementById('postsContainer'); 
   if (!container) return; 
   const sort = window._blogSort || 'newest'; 
-  let posts = [...window._allPosts].sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0)); 
-  if (sort === 'oldest') posts.reverse(); 
+  let posts = [...window._allPosts].sort((a, b) => {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    const at = Number(a.ts) || 0;
+    const bt = Number(b.ts) || 0;
+    return sort === 'oldest' ? at - bt : bt - at;
+  }); 
   if (!posts.length) { container.innerHTML = '<div class="no-posts">no posts yet.</div>'; return; } 
   const total = window._allPosts.length; 
   const newest = [...window._allPosts].sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0)); 
@@ -445,6 +556,51 @@ async function deletePost(id) {
   catch (e) { alert('error: ' + e.message); } 
 } 
 window.deletePost = deletePost; 
+
+function findPostById(id) {
+  return window._allPosts.find(p => p.id === id) || null;
+}
+
+function togglePostOriginal(id) {
+  if (!id) return;
+  window._postViewMode[id] = window._postViewMode[id] === 'original' ? 'current' : 'original';
+  filterPosts();
+}
+window.togglePostOriginal = togglePostOriginal;
+
+async function unlockPost(id) {
+  const p = findPostById(id);
+  if (!p) return;
+  const input = document.getElementById('unlockPw-' + id);
+  const status = document.getElementById('unlockStatus-' + id);
+  const password = input?.value || '';
+  if (!password) { if (status) status.textContent = 'enter password.'; return; }
+  if (status) status.textContent = 'unlocking...';
+  try {
+    const unlocked = window._unlockedPosts[id] || {};
+    if (p.lockedData) unlocked.current = postPayloadFrom(await decryptPostPayload(p.lockedData, password));
+    if (p.originalLockedData) unlocked.original = postPayloadFrom(await decryptPostPayload(p.originalLockedData, password));
+    window._unlockedPosts[id] = unlocked;
+    if (status) status.textContent = '';
+    filterPosts();
+  } catch (e) {
+    if (status) status.textContent = 'wrong password.';
+  }
+}
+window.unlockPost = unlockPost;
+
+async function togglePinPost(id) {
+  if (!window._isAdmin || !id) return;
+  const p = findPostById(id);
+  if (!p || !window._set || !window._ref || !window._db) return;
+  try {
+    await window._set(window._ref(window._db, 'blog/posts/' + id + '/pinned'), !p.pinned);
+    await touchAdminLastOnline();
+  } catch (e) {
+    alert('error: ' + e.message);
+  }
+}
+window.togglePinPost = togglePinPost;
  
 async function tryLogin() { 
   const pw = document.getElementById('pwInput')?.value || ''; 
@@ -474,6 +630,7 @@ window.tryLogin = tryLogin;
  
 function logout() { 
   window._isAdmin = false; 
+  resetPostEditor();
   document.getElementById('adminLogin').style.display = 'block'; 
   document.getElementById('adminPanel').style.display = 'none'; 
   document.getElementById('pwInput').value = ''; 
@@ -483,14 +640,50 @@ window.logout = logout;
  
 let _blogMedia = []; 
  
+function editorMediaPreviewHTML(item) {
+  if (!item) return '';
+  const url = esc(item.url || '');
+  if (item.type?.startsWith('video')) return `<video src="${url}" style="max-width:110px; max-height:90px; border:1px solid #aaaaaa;"></video>`;
+  if (item.type?.startsWith('audio')) return `<div style="width:110px; height:90px; border:1px solid #aaaaaa; display:flex; align-items:center; justify-content:center; font-size:10px;">Audio</div>`;
+  return `<img src="${url}" alt="" style="max-width:110px;max-height:90px;border:1px solid #aaaaaa;">`;
+}
+
+function renderBlogEditorMedia() {
+  const fn = document.getElementById('edFileName');
+  const rb = document.getElementById('edRemoveImg');
+  const pv = document.getElementById('edImgPreview');
+  if (fn) fn.textContent = _blogMedia.length ? _blogMedia.length + ' files' : 'none';
+  if (rb) rb.style.display = _blogMedia.length ? 'inline-block' : 'none';
+  if (pv) {
+    pv.style.display = _blogMedia.length ? 'flex' : 'none';
+    pv.innerHTML = _blogMedia.map(editorMediaPreviewHTML).join('');
+  }
+}
+
+function resetPostEditor() {
+  window._editingPostId = null;
+  const title = document.getElementById('postTitle'); if (title) title.value = '';
+  const moodText = document.getElementById('postMoodText'); if (moodText) moodText.value = '';
+  const moodEmote = document.getElementById('postMoodEmote'); if (moodEmote) moodEmote.value = '';
+  const ta = document.getElementById('postTextarea'); if (ta) ta.value = '';
+  const spoiler = document.getElementById('edSpoilerImg'); if (spoiler) spoiler.checked = false;
+  const lockOriginal = document.getElementById('edLockOriginal'); if (lockOriginal) lockOriginal.checked = false;
+  const lockUpdate = document.getElementById('edLockUpdate'); if (lockUpdate) lockUpdate.checked = false;
+  const lockPw = document.getElementById('postLockPassword'); if (lockPw) lockPw.value = '';
+  const pinned = document.getElementById('edPinned'); if (pinned) pinned.checked = false;
+  const modeTitle = document.getElementById('editorModeTitle'); if (modeTitle) modeTitle.textContent = 'new post';
+  const submit = document.getElementById('submitBtn'); if (submit) submit.textContent = 'Post';
+  const cancel = document.getElementById('cancelEditBtn'); if (cancel) cancel.style.display = 'none';
+  const status = document.getElementById('edStatus'); if (status) status.textContent = '';
+  _blogMedia = [];
+  renderBlogEditorMedia();
+  syncMoodIcon();
+}
+window.resetPostEditor = resetPostEditor;
+
 function removeBlogEditorImg() { 
   _blogMedia = []; 
-  const fn = document.getElementById('edFileName'); 
-  const rb = document.getElementById('edRemoveImg'); 
-  const pv = document.getElementById('edImgPreview'); 
-  if (fn) fn.textContent = 'none'; 
-  if (rb) rb.style.display = 'none'; 
-  if (pv) { pv.style.display = 'none'; pv.innerHTML = ''; } 
+  renderBlogEditorMedia();
 } 
 window.removeBlogEditorImg = removeBlogEditorImg; 
  
@@ -498,7 +691,7 @@ async function handleBlogFileSelect(event) {
   const files = Array.from(event.target.files); event.target.value = ''; 
   if (!files.length) return; 
    
-  const statusEl = document.getElementById('edStatus'), fnameEl = document.getElementById('edFileName'), rmBtn = document.getElementById('edRemoveImg'), preview = document.getElementById('edImgPreview'); 
+  const statusEl = document.getElementById('edStatus'); 
   if (statusEl) statusEl.textContent = 'uploading...'; 
  
   for (const file of files) { 
@@ -521,26 +714,40 @@ async function handleBlogFileSelect(event) {
        
       _blogMedia.push({ url: data.secure_url, info: { name: file.name, sizeKB, w, h }, type: file.type }); 
        
-      if (fnameEl) fnameEl.textContent = _blogMedia.length + ' files'; 
-      if (rmBtn) rmBtn.style.display = 'inline-block'; 
+      renderBlogEditorMedia();
       if (statusEl) statusEl.textContent = 'media ready.'; 
-       
-      if (preview) { 
-        preview.style.display = 'flex'; 
-        let mediaTag = ''; 
-        if (file.type.startsWith('video')) { 
-          mediaTag = `<video src="${data.secure_url}" style="max-width:110px; max-height:90px; border:1px solid #aaaaaa;"></video>`; 
-        } else if (file.type.startsWith('audio')) { 
-          mediaTag = `<div style="width:110px; height:90px; border:1px solid #aaaaaa; display:flex; align-items:center; justify-content:center; font-size:10px;">Audio</div>`; 
-        } else { 
-          mediaTag = `<img src="${data.secure_url}" alt="" style="max-width:110px;max-height:90px;border:1px solid #aaaaaa;">`; 
-        } 
-        preview.innerHTML += mediaTag; 
-      } 
     } catch (err) { if (statusEl) statusEl.textContent = 'upload error: ' + err.message; } 
   } 
 } 
 window.handleBlogFileSelect = handleBlogFileSelect; 
+
+function beginEditPost(id) {
+  if (!window._isAdmin || !id) return;
+  const p = findPostById(id);
+  const payload = getCurrentPayload(p);
+  if (!p || !payload) {
+    alert('unlock this post before editing.');
+    return;
+  }
+  window._editingPostId = id;
+  const title = document.getElementById('postTitle'); if (title) title.value = payload.title || '';
+  const moodText = document.getElementById('postMoodText'); if (moodText) moodText.value = payload.moodText || '';
+  const moodEmote = document.getElementById('postMoodEmote'); if (moodEmote) moodEmote.value = payload.moodEmote || '';
+  const ta = document.getElementById('postTextarea'); if (ta) ta.value = payload.contentRaw || '';
+  const spoiler = document.getElementById('edSpoilerImg'); if (spoiler) spoiler.checked = !!payload.spoilerImg;
+  const lockOriginal = document.getElementById('edLockOriginal'); if (lockOriginal) lockOriginal.checked = isOriginalLocked(p);
+  const lockUpdate = document.getElementById('edLockUpdate'); if (lockUpdate) lockUpdate.checked = isCurrentLocked(p);
+  const lockPw = document.getElementById('postLockPassword'); if (lockPw) lockPw.value = '';
+  const pinned = document.getElementById('edPinned'); if (pinned) pinned.checked = !!p.pinned;
+  const modeTitle = document.getElementById('editorModeTitle'); if (modeTitle) modeTitle.textContent = 'edit post';
+  const submit = document.getElementById('submitBtn'); if (submit) submit.textContent = 'Update';
+  const cancel = document.getElementById('cancelEditBtn'); if (cancel) cancel.style.display = 'inline-block';
+  _blogMedia = normalizePostMedia(payload.media) ? payload.media.map(item => ({ ...item })) : [];
+  renderBlogEditorMedia();
+  syncMoodIcon();
+  document.getElementById('adminContainer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+window.beginEditPost = beginEditPost;
  
 async function submitPost() { 
   if (!window._isAdmin) return; 
@@ -549,27 +756,71 @@ async function submitPost() {
   const title = (document.getElementById('postTitle')?.value || '').trim(); 
   const moodText = (document.getElementById('postMoodText')?.value || '').trim(); 
   const moodEmote = document.getElementById('postMoodEmote')?.value || null; 
-   
-  if (!raw && !title && _blogMedia.length === 0) { if (status) status.textContent = 'write something first.'; return; } 
-  btn.disabled = true; if (status) status.textContent = 'posting...'; 
+  const lockPassword = document.getElementById('postLockPassword')?.value || '';
+  const lockOriginal = document.getElementById('edLockOriginal')?.checked || false;
+  const lockUpdateBox = document.getElementById('edLockUpdate')?.checked || false;
+  const pinned = document.getElementById('edPinned')?.checked || false;
+  const editingId = window._editingPostId;
+  const existing = editingId ? findPostById(editingId) : null;
+  const lockUpdate = lockUpdateBox || (!editingId && lockOriginal);
+  const payload = postPayloadFrom({
+    title: title || null,
+    moodText: moodText || null,
+    moodEmote: moodEmote || null,
+    media: _blogMedia.length ? _blogMedia : null,
+    spoilerImg: document.getElementById('edSpoilerImg')?.checked || false,
+    contentRaw: raw || ' '
+  });
+
+  if (!hasPostPayloadContent(payload)) { if (status) status.textContent = 'write something first.'; return; } 
+  if ((lockUpdate || (editingId && lockOriginal && !(existing?.originalLockedData && !getOriginalPayload(existing)))) && !lockPassword) {
+    if (status) status.textContent = 'enter post password.';
+    return;
+  }
+  btn.disabled = true; if (status) status.textContent = editingId ? 'updating...' : 'posting...'; 
   try { 
-    await window._push(window._ref(window._db, 'blog/posts'), { 
-      secret: 'cdaeb22a5cd77d36df622f09873fc4ff5cf81b44ff3b90595df12b7de767059a', 
-      title: title || null, 
-      moodText: moodText || null, 
-      moodEmote: moodEmote || null, 
-      media: _blogMedia.length ? _blogMedia : null, 
-      spoilerImg: document.getElementById('edSpoilerImg')?.checked || false, 
-      contentRaw: raw || ' ', 
-      ts: (typeof window._serverTimestamp === 'function' ? window._serverTimestamp() : Date.now()) 
-    }); 
+    const record = {
+      secret: existing?.secret || POST_SECRET,
+      pinned,
+      ts: editingId ? (existing?.ts || Date.now()) : (typeof window._serverTimestamp === 'function' ? window._serverTimestamp() : Date.now())
+    };
+
+    if (lockUpdate) {
+      record.lockedData = await encryptPostPayload(payloadFieldsForSave(payload), lockPassword);
+    } else {
+      Object.assign(record, payloadFieldsForSave(payload));
+    }
+
+    if (editingId) {
+      let originalPayload = getOriginalPayload(existing);
+      if (!originalPayload && existing?.originalLockedData && lockPassword) {
+        originalPayload = postPayloadFrom(await decryptPostPayload(existing.originalLockedData, lockPassword));
+      }
+      const preservingLockedOriginal = !!(existing?.originalLockedData && !originalPayload && lockOriginal);
+      if (!originalPayload && !existing?.originalLockedData) originalPayload = getCurrentPayload(existing);
+      if (!originalPayload && !preservingLockedOriginal) throw new Error('unlock this post before editing.');
+
+      record.updatedAt = Date.now();
+      if (lockOriginal) {
+        if (preservingLockedOriginal) {
+          record.originalLockedData = existing.originalLockedData;
+        } else {
+          record.originalLockedData = await encryptPostPayload(payloadFieldsForSave(originalPayload), lockPassword);
+        }
+      } else if (existing?.originalLockedData && !getOriginalPayload(existing) && !lockPassword) {
+        throw new Error('unlock original before removing its lock.');
+      } else {
+        record.original = { ...payloadFieldsForSave(originalPayload), ts: originalPayload.ts || existing?.ts || null };
+      }
+      await window._set(window._ref(window._db, 'blog/posts/' + editingId), record);
+      delete window._unlockedPosts[editingId];
+      window._postViewMode[editingId] = 'current';
+    } else {
+      await window._push(window._ref(window._db, 'blog/posts'), record);
+    }
     await touchAdminLastOnline(); 
-    document.getElementById('postTextarea').value = ''; 
-    if (document.getElementById('postTitle')) document.getElementById('postTitle').value = ''; 
-    if (document.getElementById('postMoodText')) document.getElementById('postMoodText').value = ''; 
-    removeBlogEditorImg(); 
-    const si = document.getElementById('edSpoilerImg'); if (si) si.checked = false; 
-    if (status) { status.textContent = 'posted!'; setTimeout(() => { status.textContent = ''; }, 3000); } 
+    resetPostEditor();
+    if (status) { status.textContent = editingId ? 'updated!' : 'posted!'; setTimeout(() => { status.textContent = ''; }, 3000); } 
   } catch (e) { if (status) status.textContent = 'error: ' + e.message; btn.disabled = false; return; } 
   btn.disabled = false; 
 } 
@@ -850,7 +1101,7 @@ function injectAdminUI() {
         </div> 
         <div id="adminPanel" style="display:none;"> 
           <div style="font-size:10px;color:#888888;margin-bottom:5px;">logged in as yuri.neet &mdash; <button class="form-btn" onclick="logout()">logout</button></div> 
-          <div class="admin-section">new post</div> 
+          <div class="admin-section" id="editorModeTitle">new post</div> 
           <table class="form-table"> 
             <tr> 
               <td class="form-label">Title</td> 
@@ -887,9 +1138,21 @@ function injectAdminUI() {
                 <div id="edImgPreview" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:4px;"></div> 
               </td> 
             </tr> 
+            <tr>
+              <td class="form-label"><img class="admin-key-icon" src="${esc(POST_ICONS.key)}" alt="Password" title="Password"></td>
+              <td>
+                <input type="password" id="postLockPassword" placeholder="post password..." style="width:45%;box-sizing:border-box;">
+                <label style="font-size:10px;margin-left:5px;"><input type="checkbox" id="edLockOriginal"> lock originals?</label>
+                <label style="font-size:10px;margin-left:5px;"><input type="checkbox" id="edLockUpdate"> lock updates?</label>
+              </td>
+            </tr>
+            <tr>
+              <td class="form-label">Pin</td>
+              <td><label style="font-size:10px;"><input type="checkbox" id="edPinned"> pinned</label></td>
+            </tr>
             <tr> 
               <td class="form-label"></td> 
-              <td><button class="form-btn" id="submitBtn" onclick="submitPost()">Post</button> <span id="edStatus" style="margin-left:5px;font-size:10px;"></span></td> 
+              <td><button class="form-btn" id="submitBtn" onclick="submitPost()">Post</button> <button class="form-btn" id="cancelEditBtn" style="display:none;" onclick="resetPostEditor()">Cancel</button> <span id="edStatus" style="margin-left:5px;font-size:10px;"></span></td> 
             </tr> 
           </table> 
         </div> 

@@ -5,7 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
     <link rel="icon" type="image/jpeg" href="../../FAVICON.jpg">
     <link  rel="stylesheet"  href="https://unpkg.com/xp.css">
-
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+     window.OneSignalDeferred = window.OneSignalDeferred || [];
+     OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+    appId: "730c35c5-8ffc-4463-a37c-7849d3b0478d",
+    });
+     });
+    </script>
+    
     <title>blog</title> 
  
     <style> 
@@ -142,6 +151,40 @@ body::before {
     font-size: 10px;
     white-space: nowrap;
 }
+
+.language-menu-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.language-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1001;
+    background: #ffffff;
+    border: 1px solid #000000;
+    padding: 3px;
+    white-space: nowrap;
+}
+
+.language-option {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 22px;
+    padding: 1px;
+    cursor: pointer;
+}
+
+.language-option img {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+}
  
 .sort-btn { 
     font-size: 11px; 
@@ -275,6 +318,42 @@ body::before {
     font-size: 11px;
     font-weight: bold;
 }
+
+.post-update-line {
+    color: #666666;
+    font-size: 11px;
+    margin: 2px 0 4px;
+}
+
+.post-update-line button {
+    font-size: 11px;
+    color: #0000cc;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.post-status-icon,
+.post-admin-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    vertical-align: middle;
+}
+
+.post-icon-btn {
+    width: 20px;
+    height: 20px;
+    padding: 1px;
+    cursor: pointer;
+}
+
+.post-icon-btn:hover {
+    background: #e5e5ff;
+}
+
+.post-icon-btn.is-active {
+    background: #fff0f0;
+}
  
 .post-del-btn { 
     background: #c0c0c0; 
@@ -304,6 +383,34 @@ body::before {
     text-align: left; 
     border-radius: 2%; 
 } 
+
+.post-locked {
+    min-height: 70px;
+    border: 1px dashed #000000;
+    background: #f7f7f7;
+    padding: 10px;
+    text-align: center;
+    font-size: 12px;
+}
+
+.post-locked img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto 5px;
+}
+
+.post-unlock-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.post-unlock-row input {
+    width: 120px;
+}
  
 .post-content { 
     white-space: normal; 
@@ -472,6 +579,13 @@ body::before {
             vertical-align: middle;
         }
 
+        .admin-key-icon {
+            width: 18px;
+            height: 18px;
+            object-fit: contain;
+            vertical-align: middle;
+        }
+
         .emoji-picker-panel,
         .slash-suggest {
             display: none;
@@ -538,21 +652,6 @@ body::before {
             color: #ffffff;
         }
 
-        .blog-notifier {
-            display: none;
-            border: 1px solid #000000;
-            background: #ffffff;
-            padding: 6px;
-            margin-bottom: 10px;
-            font-size: 11px;
-            text-align: left;
-        }
-
-        .blog-notifier button {
-            font-size: 11px;
-            margin-left: 4px;
-        }
-
         .show-more-wrap {
             margin: 10px 0 2px;
             text-align: center;
@@ -607,11 +706,18 @@ body::before {
             <button id="sortBtnOldest" class="sort-btn" onclick="setSortBlog('oldest')">[oldest]</button>  |  
             <text>quick:</text>
             <button style="color: #222222;" onclick="gettotheend()">[charon]</button>
+            |
+            <span class="language-menu-wrap">
+                <button style="color: #222222;" onclick="toggleLanguageMenu()">[language]</button>
+                <span id="languageMenu" class="language-menu">
+                    <button class="language-option" title="Português Brasil" onclick="setPageLanguage('pt-BR')"><img src="https://greenbox.network/icons/calle/Brazil.png" alt="Português Brasil" title="Português Brasil"></button>
+                    <button class="language-option" title="English" onclick="setPageLanguage('en')"><img src="https://greenbox.network/icons/calle/USA.png" alt="English" title="English"></button>
+                </span>
+            </span>
             <span class="blog-toolbar-spacer"></span>
             <span id="adminLastOnline" class="last-online">last online: unknown</span>
         </div> 
         <br><br> 
-        <div id="blogNotifier" class="blog-notifier"></div>
         <div id="adminContainer"></div> 
  
         <div id="postsContainer"> 
