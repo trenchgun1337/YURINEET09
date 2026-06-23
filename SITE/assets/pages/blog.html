@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
     <link rel="icon" type="image/jpeg" href="../../FAVICON.jpg">
     <link  rel="stylesheet"  href="https://unpkg.com/xp.css">
+    <script src="https://iframe.chat/scripts/main.min.js"></script>
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
      window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -706,7 +707,7 @@ body::before {
             <button id="sortBtnOldest" class="sort-btn" onclick="setSortBlog('oldest')">[oldest]</button>  |  
             <text>quick:</text>
             <button style="color: #222222;" onclick="gettotheend()">[charon]</button>
-            |
+            
             <span class="language-menu-wrap">
                 <button style="color: #222222;" onclick="toggleLanguageMenu()">[translate]</button>
                 <span id="languageMenu" class="language-menu">
@@ -746,4 +747,7 @@ body::before {
     <p>where shall i take you?</p>
 <a href="./home.html">to home</a> |
 <a href="../../index.html">back</a></body> 
+
+<iframe src="https://iframe.chat/embed?chat=96774790" id="chattable"></iframe>
+
 </html>
