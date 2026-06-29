@@ -508,6 +508,7 @@ function initBlogChrome() {
   setAdminLastOnline(Number(localStorage.getItem(BLOG_LAST_ONLINE_KEY)) || null); 
   const lang = localStorage.getItem('yurineetBlogLanguage');
   if (lang) document.documentElement.lang = lang;
+  renderRecentBlogSidebars();
 } 
 
 if (document.readyState === 'loading') { 
@@ -518,6 +519,7 @@ if (document.readyState === 'loading') {
 
 
 function filterPosts() { 
+  renderRecentBlogSidebars();
   const container = document.getElementById('postsContainer'); 
   if (!container) return; 
   const sort = window._blogSort || 'newest'; 
@@ -548,6 +550,36 @@ function showMorePosts() {
   filterPosts();
 }
 window.showMorePosts = showMorePosts;
+
+function recentPostLabel(p) {
+  if (isCurrentLocked(p) && !window._unlockedPosts[p.id]?.current) {
+    return { title: 'locked post', excerpt: 'password needed' };
+  }
+  const payload = getCurrentPayload(p) || postPayloadFrom(p);
+  const raw = String(payload?.contentRaw || '').replace(/\s+/g, ' ').trim();
+  const title = String(payload?.title || raw || 'untitled post').trim();
+  const excerpt = raw && raw !== title ? raw.slice(0, 58) + (raw.length > 58 ? '...' : '') : '';
+  return { title: title.slice(0, 48) + (title.length > 48 ? '...' : ''), excerpt };
+}
+
+function renderRecentBlogSidebars() {
+  const targets = document.querySelectorAll('[data-recent-posts]');
+  if (!targets.length) return;
+  const posts = [...(window._allPosts || [])]
+    .sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0))
+    .slice(0, 6);
+  const html = posts.length
+    ? posts.map(p => {
+        const id = esc(p.id || '');
+        const label = recentPostLabel(p);
+        const href = location.pathname.endsWith('/blog.html') ? `#post-${id}` : `blog.html#post-${id}`;
+        const pin = p.pinned ? '<span class="recent-pin">pin</span>' : '';
+        return `<li class="recent-post-item"><a href="${href}"><span class="recent-post-title">${esc(label.title)}</span>${pin}<span class="recent-post-date">${esc(fmtDate(p.ts))}</span>${label.excerpt ? `<span class="recent-post-excerpt">${esc(label.excerpt)}</span>` : ''}</a></li>`;
+      }).join('')
+    : '<li class="recent-post-empty">waiting for posts...</li>';
+  targets.forEach(target => { target.innerHTML = html; });
+}
+window.renderRecentBlogSidebars = renderRecentBlogSidebars;
  
 async function deletePost(id) { 
   if (!window._isAdmin || !id) return; 
@@ -1091,7 +1123,7 @@ function injectAdminUI() {
   const c = document.getElementById('adminContainer'); if (!c) return; 
   const moodOptions = '<option value="" selected>none</option>' + Object.keys(EMOTES).filter(m => emoteCategory(m) === 'mood').map(m => `<option value="${m}">${m}</option>`).join(''); 
   c.innerHTML = ` 
-    <div class="content-box" style="text-align:center;margin-top:4px;"> 
+    <div class="content-box admin-panel-box" style="text-align:left;margin-top:4px;"> 
       <div class="content-box-head">admin panel</div> 
       <div class="content-box-body"> 
         <div id="adminLogin" style="font-size:11px;"> 
